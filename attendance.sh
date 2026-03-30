@@ -7,6 +7,7 @@
 # - CSV export functionality
 # - Summary analytics (Total login counts & aggregated duration)
 # - Automation support (cron, tar, rsync)
+# - AM/PM Time Formatting
 # ==============================================================================
 
 # Directories
@@ -31,9 +32,9 @@ BACKUP_DEST="/backups/attendance"
 # Print formatting
 print_header() {
     clear
-    echo "======================================================"
-    echo "        Linux Automated Attendance System             "
-    echo "======================================================"
+    echo "==========================================================================="
+    echo "                 Linux Automated Attendance System                         "
+    echo "==========================================================================="
 }
 
 pause() {
@@ -41,32 +42,71 @@ pause() {
     read -p "Press Enter to return to the menu..."
 }
 
+# Core logic to parse a single line of the 'last' command
+parse_log_line() {
+    local line="$1"
+    user=$(echo "$line" | awk '{print $1}')
+    term=$(echo "$line" | awk '{print $2}')
+    
+    # Strictly extract the first instance of HH:MM for login time
+    local raw_login_time=$(echo "$line" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
+    
+    # Convert login time to AM/PM format safely
+    if [ -n "$raw_login_time" ]; then
+        login_time=$(date -d "$raw_login_time" +"%I:%M %p" 2>/dev/null || echo "$raw_login_time")
+    else
+        login_time="N/A"
+    fi
+    
+    # Determine logout time and duration based on session state
+    if echo "$line" | grep -q "still logged in"; then
+        logout_time="Active"
+        duration="Active"
+    elif echo "$line" | grep -q "\- crash"; then
+        logout_time="Crash"
+        duration=$(echo "$line" | grep -oE '\([0-9+:]+\)' | tr -d '()')
+    elif echo "$line" | grep -q "\- down"; then
+        logout_time="Sys Down"
+        duration=$(echo "$line" | grep -oE '\([0-9+:]+\)' | tr -d '()')
+    else
+        # Standard logout time is the second HH:MM match on the line
+        local raw_logout_time=$(echo "$line" | grep -oE '[0-9]{2}:[0-9]{2}' | sed -n '2p')
+        
+        # Convert logout time to AM/PM format safely
+        if [ -n "$raw_logout_time" ]; then
+            logout_time=$(date -d "$raw_logout_time" +"%I:%M %p" 2>/dev/null || echo "$raw_logout_time")
+        else
+            logout_time="N/A"
+        fi
+        duration=$(echo "$line" | grep -oE '\([0-9+:]+\)' | tr -d '()')
+    fi
+
+    # Fallbacks for empty variables
+    [ -z "$duration" ] && duration="N/A"
+}
+
 # ======================== Core Functions ===================
 
 generate_daily_attendance() {
     local date_filter
-    date_filter=$(date +"%a %b %d") # e.g., Thu Mar 30 
+    date_filter=$(date +"%a %b %e")
     
     echo "Generating Daily Attendance for: $date_filter"
     echo "This tracks all sessions recorded for today."
-    echo "------------------------------------------------------"
-    printf "%-15s %-15s %-15s %-15s\n" "USERNAME" "TERMINAL" "LOGIN TIME" "DURATION"
-    echo "------------------------------------------------------"
+    echo "---------------------------------------------------------------------------"
+    printf "%-15s %-15s %-15s %-15s %-15s\n" "USERNAME" "TERMINAL" "LOGIN TIME" "LOGOUT TIME" "DURATION"
+    echo "---------------------------------------------------------------------------"
     
-    # Uses last to parse wtmp, greps today's date, ignores reboots
-    last | grep "$date_filter" | grep -v 'reboot' | head -n -1 > "/tmp/last_temp.txt"
+    # Exclude reboots, wtmp endings, and redundant seat0 entries
+    last | grep "$date_filter" | egrep -v 'reboot|wtmp|seat0' > "/tmp/last_temp.txt"
     
     if [ ! -s "/tmp/last_temp.txt" ]; then
         echo "No attendance records found for today."
     else
         while read -r line; do
-            user=$(echo "$line" | awk '{print $1}')
-            term=$(echo "$line" | awk '{print $2}')
-            login_time=$(echo "$line" | awk '{print $7}')
-            duration=$(echo "$line" | awk '{print $NF}' | tr -d '()')
-            
+            parse_log_line "$line"
             # Print tabular format
-            printf "%-15s %-15s %-15s %-15s\n" "$user" "$term" "$login_time" "$duration"
+            printf "%-15s %-15s %-15s %-15s %-15s\n" "$user" "$term" "$login_time" "$logout_time" "$duration"
         done < "/tmp/last_temp.txt"
     fi
     rm -f "/tmp/last_temp.txt"
@@ -77,32 +117,14 @@ export_to_csv() {
     local full_csv_file="${REPORT_DIR}/full_attendance_export_${TODAY}.csv"
     
     # Create Headers
-    echo "Username,Terminal,Host,Day,Month,Date,Time,Duration" > "$full_csv_file"
+    echo "Username,Terminal,Login_Time,Logout_Time,Duration" > "$full_csv_file"
     
-    # Parse last output - filter reboot and wtmp lines
-    last | egrep -v "reboot|wtmp" | awk 'NF>0' | head -n -1 | while read -r line; do
-        user=$(echo "$line" | awk '{print $1}')
-        term=$(echo "$line" | awk '{print $2}')
-        host=$(echo "$line" | awk '{print $3}')
+    # Parse last output - filter reboot, wtmp, and redundant seat0 lines
+    last | egrep -v "reboot|wtmp|seat0" | awk 'NF>0' | while read -r line; do
+        parse_log_line "$line"
         
-        # If no host IP is recorded (e.g. local tty), fields shift.
-        if [[ "$host" =~ ^[A-Z] ]]; then
-            # Host is empty, shifting everything
-            day=$host
-            month=$(echo "$line" | awk '{print $4}')
-            date_num=$(echo "$line" | awk '{print $5}')
-            time_val=$(echo "$line" | awk '{print $6}')
-            host="Local"
-        else
-            day=$(echo "$line" | awk '{print $4}')
-            month=$(echo "$line" | awk '{print $5}')
-            date_num=$(echo "$line" | awk '{print $6}')
-            time_val=$(echo "$line" | awk '{print $7}')
-        fi
-        
-        duration=$(echo "$line" | awk '{print $NF}' | tr -d '()')
-        
-        echo "$user,$term,$host,$day,$month,$date_num,$time_val,$duration" >> "$full_csv_file"
+        # Write to CSV
+        echo "$user,$term,$login_time,$logout_time,$duration" >> "$full_csv_file"
     done
     
     echo "Successfully Exported: $full_csv_file"
@@ -110,9 +132,9 @@ export_to_csv() {
 
 summary_analytics() {
     echo "Summary Analytics: Total Login Count per User (Lifetime)"
-    echo "------------------------------------------------------"
-    last | egrep -v "reboot|wtmp" | awk '{print $1}' | sort | uniq -c | sort -nr
-    echo "------------------------------------------------------"
+    echo "---------------------------------------------------------------------------"
+    last | egrep -v "reboot|wtmp|seat0" | awk '{print $1}' | sort | uniq -c | sort -nr
+    echo "---------------------------------------------------------------------------"
 }
 
 # ======================== Automation =======================
@@ -121,7 +143,6 @@ rotate_and_archive() {
     echo "Archiving old reports..."
     local archive_name="attendance_logs_${TODAY}.tar.gz"
     
-    # Use tar to compress files older than 7 days
     if find "$REPORT_DIR" -type f -name "*.csv" -mtime +7 | grep -q "csv"; then
         find "$REPORT_DIR" -type f -name "*.csv" -mtime +7 -exec tar -czvf "${ARCHIVE_DIR}/${archive_name}" {} + > /dev/null
         find "$REPORT_DIR" -type f -name "*.csv" -mtime +7 -exec rm {} +
@@ -137,8 +158,6 @@ sync_to_remote() {
         echo "Remote backup not configured. Please edit the script variables."
     else
         echo "Running: rsync -avz -e ssh $ARCHIVE_DIR/ ${BACKUP_USER}@${BACKUP_HOST}:${BACKUP_DEST}"
-        # Make sure to setup SSH keys for passwordless auth via cron!
-        # rsync -avz -e ssh "$ARCHIVE_DIR/" "${BACKUP_USER}@${BACKUP_HOST}:${BACKUP_DEST}"
         echo "[DRY RUN] Rsync logic is implemented, configure SSH keys to activate."
     fi
 }
@@ -154,7 +173,6 @@ setup_cron() {
 # ======================== Auto Mode ========================
 
 if [ "$1" == "--auto" ]; then
-    # Automated execution logic for cron jobs
     generate_daily_attendance > "${REPORT_DIR}/automated_daily_${TODAY}.txt"
     export_to_csv
     rotate_and_archive
@@ -172,7 +190,7 @@ while true; do
     echo "4. Archive Old Reports (Tar)"
     echo "5. Setup Cron Automation & Rsync"
     echo "6. Exit"
-    echo "------------------------------------------------------"
+    echo "---------------------------------------------------------------------------"
     read -p "Select an option [1-6]: " choice
     
     case $choice in
