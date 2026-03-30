@@ -1,48 +1,97 @@
-# Automated Attendance System using Login Logs
+# 📊 Linux Automated Attendance System
 
-A comprehensive semester final project for an Operating Systems lab. Built by a 5-person team, this system extracts user login data from Linux machine logs (`last` / `wtmp`), stores them in a relational database (SQLite), and displays actionable analytics dynamically on a high-end web dashboard. 
+[![Bash Script](https://img.shields.io/badge/language-bash-4EAA25.svg)](https://www.gnu.org/software/bash/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
 
-## Features
-- **Bash Mandatory Component**: A suite of robust Bash scripts orchestrates data extraction, sanitization, and DB insertion seamlessly without third-party ingestion tools.
-- **Automated Fraud Detection**: Filters out impossibly short sessions (<1 min) and excessively long hanging sessions (>24 hours).
-- **SQLite Database Integration**: Keeps track of students' net hours logged across multiple logins.
-- **Alert System**: Detects "absentee" users who fail to meet the required lab hours threshold and triggers notifications.
-- **RESTful API**: Python Flask backend to serve data scalably.
-- **CSV Data Export**: One-click download of attendance statistics through the UI or `make export` via terminal.
-- **Premium Dashboard UI**: Built with Tailwind CSS and Chart.js featuring glassmorphism design.
-- **Fully Packaged Setup**: Includes an `install.sh` and `Makefile` for one-click deployment.
+A robust, terminal-based attendance tracking solution for Linux systems. This system monitors user login/logout activity, generates daily reports, provides analytical summaries, and supports fully automated backups and archiving.
 
-## Team Roles & Division of Labor
+---
 
-This project is perfectly modular for a 5-person team:
-1. **Core Data Architect (Bash)**: Wrote `scripts/extract_logs.sh`, ensuring logs are read, cleaned, and piped effectively.
-2. **Database Architect (SQL)**: Created `scripts/db_init.sql` and the ingestion schema to handle UPSERTs and View aggregation.
-3. **Alerts & Automation (Bash)**: Authored `scripts/alert_absentees.sh`, tracking low attendance and triggering automated system alerts.
-4. **Backend Developer (Python)**: Developed `backend/app.py` to bridge the SQLite files into a robust REST JSON API using Flask.
-5. **Frontend Developer (HTML/JS)**: Built `frontend/index.html` combining Tailwind CSS and Chart.js to make statistical metrics interactive and visually pleasing.
+## ✨ Key Features
 
-## Installation & Setup
+*   **🔍 Real-time Tracking**: Monitors all user sessions using system logs (`last`).
+*   **📂 CSV Exporting**: Generate industry-standard CSV reports for easy import into Excel or Google Sheets.
+*   **📈 Summary Analytics**: Instant "Leaderboard" view of user activity and login frequency.
+*   **📦 Smart Archiving**: Automatically compresses old reports using `tar` to save disk space.
+*   **🤖 Full Automation**: Built-in `cron` integration to schedule daily task execution.
+*   **🌐 Remote Sync**: Supports `rsync` over SSH for secure off-site backups.
+*   **💻 Interactive UI**: A clean, menu-driven terminal interface for manual management.
 
-1. **Install dependencies**:
-   ```bash
-   make install
-   ```
-2. **Extract System Logs & Initialize Database**:
-   ```bash
-   make extract
-   ```
-   *This reads `/var/log/wtmp` using the `last` command, compiles the durations, and saves to `data/attendance.db`.*
-3. **Run the Alert System** (Optional):
-   ```bash
-   make alert
-   ```
-4. **Start the Web Dashboard**:
-   ```bash
-   make run
-   ```
-   *Once started, simply open the `frontend/index.html` file in any web browser. The API will respond on `http://127.0.0.1:5000`.*
-5. **Export to CSV**:
-   ```bash
-   make export
-   ```
-   *This outputs timestamped CSVs directly into `data/exports/`.*
+---
+
+## 🚀 Quick Start
+
+### 1. Installation
+Clone the repository (or copy the script) and ensure it has execution permissions:
+
+```bash
+chmod +x attendance.sh
+```
+
+### 2. Manual Execution
+Run the script to access the interactive dashboard:
+
+```bash
+./attendance.sh
+```
+
+### 3. Automated Setup
+To enable daily automation (Reports @ 11:50 PM, Archiving, and Backups):
+1.  Run the script: `./attendance.sh`
+2.  Select Option **5** (**Setup Cron Automation & Rsync**).
+
+---
+
+## 🛠 Usage Modes
+
+### 🖥 Interactive Mode
+The script features a user-friendly menu:
+1.  **Show Daily Attendance**: See who is logged in *today*.
+2.  **Export All History to CSV**: Save all historical logs to a portable file.
+3.  **View Summary Analytics**: Ranking of users by login count.
+4.  **Archive Old Reports**: Compress logs older than 7 days.
+5.  **Setup Automation**: Configure the system-wide 'Auto-Pilot'.
+
+### ⚙️ Auto-Pilot Mode
+For use in servers or scheduled tasks, use the `--auto` flag:
+```bash
+./attendance.sh --auto
+```
+This mode generates today's report, exports CSVs, archives old data, and attempts a remote sync without any user input.
+
+---
+
+## 📂 System Architecture
+
+When executed, the system creates an `attendance_system` workspace in your home directory:
+
+```text
+~/attendance_system/
+├── reports/     # Active CSV & TXT attendance records
+├── archives/    # Compressed .tar.gz historical data
+└── cron.log     # Internal logs for automated tasks
+```
+
+---
+
+## 🔧 Configuration
+Open `attendance.sh` in your favorite editor to customize:
+*   **`WORK_DIR`**: Where the system stores data (Default: `~/attendance_system`).
+*   **`BACKUP_DEST`**: The remote server path for `rsync` backups.
+*   **`Cron Schedule`**: Modify the `setup_cron` function to change execution times.
+
+---
+
+## 📜 Documentation
+For a deep dive into how the code works (perfect for beginners), refer to:
+*   [Script-Explanation.md](./Script-Explanation.md) - Detailed line-by-line breakdown.
+*   `Script-Explanation.pdf` - Printable version of the guide.
+
+---
+
+## ⚖️ License
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+---
+> Developed with ❤️ for Linux Administrators.
