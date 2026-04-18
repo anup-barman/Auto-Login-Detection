@@ -22,7 +22,7 @@ mkdir -p "$REPORT_DIR" "$ARCHIVE_DIR"
 TODAY=$(date +"%Y-%m-%d")
 CSV_OUTPUT="${REPORT_DIR}/attendance_${TODAY}.csv"
 
-# Remote Backup Settings (Modify these for your environment)
+# Remote Backup Settings
 SIMULATE_LOCAL_BACKUP="true" # Set to true to demonstrate rsync copying to a local folder
 BACKUP_USER="backupuser"
 BACKUP_HOST="192.168.1.100"
