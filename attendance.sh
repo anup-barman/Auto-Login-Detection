@@ -48,6 +48,10 @@ parse_log_line() {
     user=$(echo "$line" | awk '{print $1}')
     term=$(echo "$line" | awk '{print $2}')
     
+    # Extract the exact date of the login (e.g., "Sat Apr 18")
+    login_date=$(echo "$line" | grep -oE '[A-Z][a-z]{2} [A-Z][a-z]{2} +[0-9]+' | head -1)
+    [ -z "$login_date" ] && login_date="N/A"
+    
     # Strictly extract the first instance of HH:MM for login time
     local raw_login_time=$(echo "$line" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
     
@@ -94,11 +98,11 @@ generate_daily_attendance() {
     echo "Generating Daily Attendance for: $date_filter"
     echo "This tracks all sessions recorded for today."
     echo "---------------------------------------------------------------------------"
-    printf "%-15s %-15s %-15s %-15s %-15s\n" "USERNAME" "TERMINAL" "LOGIN TIME" "LOGOUT TIME" "DURATION"
+    printf "%-15s %-15s %-15s %-15s %-15s %-15s\n" "USERNAME" "TERMINAL" "DATE" "LOGIN TIME" "LOGOUT TIME" "DURATION"
     echo "---------------------------------------------------------------------------"
     
-    # Exclude reboots, wtmp endings, and redundant seat0 entries
-    last | grep "$date_filter" | egrep -v 'reboot|wtmp|seat0' > "/tmp/last_temp.txt"
+    # Exclude reboots, wtmp endings, redundant seat0, and gdm-greeter entries
+    last | grep "$date_filter" | egrep -v 'reboot|wtmp|seat0|gdm-gree' > "/tmp/last_temp.txt"
     
     if [ ! -s "/tmp/last_temp.txt" ]; then
         echo "No attendance records found for today."
@@ -106,7 +110,7 @@ generate_daily_attendance() {
         while read -r line; do
             parse_log_line "$line"
             # Print tabular format
-            printf "%-15s %-15s %-15s %-15s %-15s\n" "$user" "$term" "$login_time" "$logout_time" "$duration"
+            printf "%-15s %-15s %-15s %-15s %-15s %-15s\n" "$user" "$term" "$login_date" "$login_time" "$logout_time" "$duration"
         done < "/tmp/last_temp.txt"
     fi
     rm -f "/tmp/last_temp.txt"
@@ -117,23 +121,44 @@ export_to_csv() {
     local full_csv_file="${REPORT_DIR}/full_attendance_export_${TODAY}.csv"
     
     # Create Headers
-    echo "Username,Terminal,Login_Time,Logout_Time,Duration" > "$full_csv_file"
+    echo "Username,Terminal,Date,Login_Time,Logout_Time,Duration" > "$full_csv_file"
     
-    # Parse last output - filter reboot, wtmp, and redundant seat0 lines
-    last | egrep -v "reboot|wtmp|seat0" | awk 'NF>0' | while read -r line; do
+    # Parse last output - filter reboot, wtmp, seat0, and pgdm-gree lines
+    last | egrep -v "reboot|wtmp|seat0|gdm-gree" | awk 'NF>0' | while read -r line; do
         parse_log_line "$line"
         
         # Write to CSV
-        echo "$user,$term,$login_time,$logout_time,$duration" >> "$full_csv_file"
+        echo "$user,$term,$login_date,$login_time,$logout_time,$duration" >> "$full_csv_file"
     done
     
     echo "Successfully Exported: $full_csv_file"
 }
 
+export_today_to_csv() {
+    echo "Exporting today's attendance to CSV..."
+    local today_csv_file="${REPORT_DIR}/today_attendance_export_${TODAY}.csv"
+    
+    local date_filter
+    date_filter=$(date +"%a %b %e")
+    
+    # Create Headers
+    echo "Username,Terminal,Date,Login_Time,Logout_Time,Duration" > "$today_csv_file"
+    
+    # Parse last output - filter for today and specific exclusions
+    last | grep "$date_filter" | egrep -v "reboot|wtmp|seat0|gdm-gree" | awk 'NF>0' | while read -r line; do
+        parse_log_line "$line"
+        
+        # Write to CSV
+        echo "$user,$term,$login_date,$login_time,$logout_time,$duration" >> "$today_csv_file"
+    done
+    
+    echo "Successfully Exported: $today_csv_file"
+}
+
 summary_analytics() {
     echo "Summary Analytics: Total Login Count per User (Lifetime)"
     echo "---------------------------------------------------------------------------"
-    last | egrep -v "reboot|wtmp|seat0" | awk '{print $1}' | sort | uniq -c | sort -nr
+    last | egrep -v "reboot|wtmp|seat0|gdm-gree" | awk '{print $1}' | sort | uniq -c | sort -nr
     echo "---------------------------------------------------------------------------"
 }
 
@@ -186,12 +211,13 @@ while true; do
     print_header
     echo "1. Show Daily Attendance (Today)"
     echo "2. Export All History to CSV"
-    echo "3. View Summary Analytics"
-    echo "4. Archive Old Reports (Tar)"
-    echo "5. Setup Cron Automation & Rsync"
-    echo "6. Exit"
+    echo "3. Export Today's History to CSV"
+    echo "4. View Summary Analytics"
+    echo "5. Archive Old Reports (Tar)"
+    echo "6. Setup Cron Automation & Rsync"
+    echo "7. Exit"
     echo "---------------------------------------------------------------------------"
-    read -p "Select an option [1-6]: " choice
+    read -p "Select an option [1-7]: " choice
     
     case $choice in
         1)
@@ -203,14 +229,18 @@ while true; do
             pause
             ;;
         3)
-            summary_analytics
+            export_today_to_csv
             pause
             ;;
         4)
-            rotate_and_archive
+            summary_analytics
             pause
             ;;
         5)
+            rotate_and_archive
+            pause
+            ;;
+        6)
             echo "Automation Setup:"
             echo "- This sets up a Cron job to automate daily exports."
             echo "- Includes Tar log rotation and Rsync backups."
@@ -218,7 +248,7 @@ while true; do
             sync_to_remote
             pause
             ;;
-        6)
+        7)
             echo "Exiting Attendance System. Goodbye!"
             exit 0
             ;;
