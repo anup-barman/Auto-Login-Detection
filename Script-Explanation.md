@@ -19,14 +19,19 @@ term=$(echo "$line" | awk '{print $2}')
 
 ### Pattern Matching with Regular Expressions (`grep -oE`)
 ```bash
+login_date=$(echo "$line" | grep -oE '[A-Z][a-z]{2} [A-Z][a-z]{2} +[0-9]+' | head -1)
 local raw_login_time=$(echo "$line" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
 ```
 *   **`grep -oE`**: The `-E` flag enables *Extended* Regular Expressions, allowing for complex symbolic pattern matching syntax. The `-o` flag tells `grep` to *only* output the exact matched string chunk, rather than printing the whole line that contains the match.
-*   **`'[0-9]{2}:[0-9]{2}'`**: This is the regular expression pattern string:
+*   **Date Extraction Pattern (`'[A-Z][a-z]{2} [A-Z][a-z]{2} +[0-9]+'`)**: This regex captures the date portion (e.g., "Sat Apr 18") by matching:
+    *   A capitalized three-letter day (`[A-Z][a-z]{2}`).
+    *   A capitalized three-letter month (`[A-Z][a-z]{2}`).
+    *   One or more spaces (` +`) followed by one or more digits representing the day of the month (`[0-9]+`).
+*   **Time Extraction Pattern (`'[0-9]{2}:[0-9]{2}'`)**: This is the regular expression pattern string for time:
     *   `[0-9]` matches any single digit from 0 to 9.
     *   `{2}` means "exactly two instances of the preceding character class".
     *   So, it looks for: 2 consecutive digits, a literal colon `:`, and 2 consecutive digits (e.g., `14:30`, `08:05`).
-*   **`head -1`**: A single log line might contain multiple hour:minute timestamps (login, logout, active durations). By piping the extracted timestamps into `head -1`, the script strictly grabs only the *first* matching timestamp block in the stream—which always correlates to the user login time.
+*   **`head -1`**: A single log line might contain multiple timestamps. By piping the extracted timestamps into `head -1`, the script strictly grabs only the *first* matching time chunk in the stream—which always correlates to the user login time.
 
 ### String Scrubbing with `tr`
 ```bash
@@ -76,11 +81,11 @@ Understanding precisely how Bash utilizes string streams manipulating mass amoun
 
 ### Stream Filtering Chains
 ```bash
-last | grep "$date_filter" | egrep -v 'reboot|wtmp|seat0' > "/tmp/last_temp.txt"
+last | grep "$date_filter" | egrep -v 'reboot|wtmp|seat0|gdm-gree' > "/tmp/last_temp.txt"
 ```
 *   **`last`**: Initially forcefully spits out raw thousand lines of intense binary tracking log logic straight directly onto the screen.
 *   **`| grep "$date_filter"`**: Pipes the thousands of physical unrendered text stream vectors narrowing out specific matching line block structures that specifically contain the matching full today's accurate localized literal date text (e.g., `Mon Mar 20`).
-*   **`| egrep -v`**: `egrep` specifically enables regex allowing complex logical operator grouping (`|` operates internally natively inside the quotes). The critical `-v` specific argument flag explicitly strictly *inverts* the logic match structure logic. This specific stream pipe layer firmly states: "Immediately obliterate any incoming lines stream strings that visibly contain the precise words 'reboot', 'wtmp', or 'seat0'".
+*   **`| egrep -v`**: `egrep` specifically enables regex allowing complex logical operator grouping (`|` operates internally natively inside the quotes). The critical `-v` specific argument flag explicitly strictly *inverts* the logic match structure logic. This specific stream pipe layer firmly states: "Immediately obliterate any incoming lines stream strings that visibly contain the precise words 'reboot', 'wtmp', 'seat0', or 'gdm-gree'".
 *   **`> "/tmp/last_temp.txt"`**: Concludes standard single operation text streaming physical string overwrite redirection, tossing text out of ram right direct into a physical hardware written harddrive space caching memory allocations securely.
 
 ### Safe Line-by-Line Reading
@@ -94,7 +99,7 @@ done < "/tmp/last_temp.txt"
 
 ### Advanced Grouping & Counting Line Chains Analysis
 ```bash
-last | egrep -v "reboot|wtmp|seat0" | awk '{print $1}' | sort | uniq -c | sort -nr
+last | egrep -v "reboot|wtmp|seat0|gdm-gree" | awk '{print $1}' | sort | uniq -c | sort -nr
 ```
 This single structure effectively condenses heavy string analysis data structures right cleanly seamlessly simply.
 1. `last`: Gathers everything available string arrays natively completely.

@@ -23,9 +23,10 @@ TODAY=$(date +"%Y-%m-%d")
 CSV_OUTPUT="${REPORT_DIR}/attendance_${TODAY}.csv"
 
 # Remote Backup Settings (Modify these for your environment)
+SIMULATE_LOCAL_BACKUP="true" # Set to true to demonstrate rsync copying to a local folder
 BACKUP_USER="backupuser"
 BACKUP_HOST="192.168.1.100"
-BACKUP_DEST="/backups/attendance"
+BACKUP_DEST="${HOME}/attendance_system/remote_backup_simulation"
 
 # ======================== Helpers ==========================
 
@@ -55,7 +56,7 @@ parse_log_line() {
     # Strictly extract the first instance of HH:MM for login time
     local raw_login_time=$(echo "$line" | grep -oE '[0-9]{2}:[0-9]{2}' | head -1)
     
-    # Convert login time to AM/PM format safely
+    # Convert login time to AM/PM format
     if [ -n "$raw_login_time" ]; then
         login_time=$(date -d "$raw_login_time" +"%I:%M %p" 2>/dev/null || echo "$raw_login_time")
     else
@@ -102,6 +103,7 @@ generate_daily_attendance() {
     echo "---------------------------------------------------------------------------"
     
     # Exclude reboots, wtmp endings, redundant seat0, and gdm-greeter entries
+    # last reads /var/log/wtmp and cheks the successful logins and logouts
     last | grep "$date_filter" | egrep -v 'reboot|wtmp|seat0|gdm-gree' > "/tmp/last_temp.txt"
     
     if [ ! -s "/tmp/last_temp.txt" ]; then
@@ -178,11 +180,19 @@ rotate_and_archive() {
 }
 
 sync_to_remote() {
-    echo "Attempting to sync archives to remote server using rsync over ssh..."
-    if [ -z "$BACKUP_USER" ] || [ -z "$BACKUP_HOST" ]; then
+    echo "Attempting to sync archives to remote backup destination..."
+    
+    # Create the simulated destination if it's a local backup test
+    if [ "$SIMULATE_LOCAL_BACKUP" == "true" ]; then
+        echo "Running in local simulation mode. Copying to $BACKUP_DEST"
+        mkdir -p "$BACKUP_DEST"
+        rsync -avz "$ARCHIVE_DIR/" "$BACKUP_DEST/"
+        echo "Simulated sync complete! Check $BACKUP_DEST"
+    elif [ -z "$BACKUP_USER" ] || [ -z "$BACKUP_HOST" ]; then
         echo "Remote backup not configured. Please edit the script variables."
     else
         echo "Running: rsync -avz -e ssh $ARCHIVE_DIR/ ${BACKUP_USER}@${BACKUP_HOST}:${BACKUP_DEST}"
+        # rsync -avz -e ssh "$ARCHIVE_DIR/" "${BACKUP_USER}@${BACKUP_HOST}:${BACKUP_DEST}"
         echo "[DRY RUN] Rsync logic is implemented, configure SSH keys to activate."
     fi
 }
@@ -219,42 +229,33 @@ while true; do
     echo "---------------------------------------------------------------------------"
     read -p "Select an option [1-7]: " choice
     
-    case $choice in
-        1)
-            generate_daily_attendance
-            pause
-            ;;
-        2)
-            export_to_csv
-            pause
-            ;;
-        3)
-            export_today_to_csv
-            pause
-            ;;
-        4)
-            summary_analytics
-            pause
-            ;;
-        5)
-            rotate_and_archive
-            pause
-            ;;
-        6)
-            echo "Automation Setup:"
-            echo "- This sets up a Cron job to automate daily exports."
-            echo "- Includes Tar log rotation and Rsync backups."
-            setup_cron
-            sync_to_remote
-            pause
-            ;;
-        7)
-            echo "Exiting Attendance System. Goodbye!"
-            exit 0
-            ;;
-        *)
-            echo "Invalid option. Please try again."
-            sleep 1
-            ;;
-    esac
+    if [ "$choice" == "1" ]; then
+        generate_daily_attendance
+        pause
+    elif [ "$choice" == "2" ]; then
+        export_to_csv
+        pause
+    elif [ "$choice" == "3" ]; then
+        export_today_to_csv
+        pause
+    elif [ "$choice" == "4" ]; then
+        summary_analytics
+        pause
+    elif [ "$choice" == "5" ]; then
+        rotate_and_archive
+        pause
+    elif [ "$choice" == "6" ]; then
+        echo "Automation Setup:"
+        echo "- This sets up a Cron job to automate daily exports."
+        echo "- Includes Tar log rotation and Rsync backups."
+        setup_cron
+        sync_to_remote
+        pause
+    elif [ "$choice" == "7" ]; then
+        echo "Exiting Attendance System. Goodbye!"
+        exit 0
+    else
+        echo "Invalid option. Please try again."
+        sleep 1
+    fi
 done
